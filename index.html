@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>El Impostor</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#111827;color:white;text-align:center;padding:25px}
+main{max-width:650px;margin:auto;background:#1f2937;padding:28px;border-radius:18px}
+h1{color:#facc15;font-size:36px}
+h2{color:#facc15}
+input,select,button,textarea{padding:12px;margin:7px;border-radius:9px;border:0;font-size:16px}
+input,select,textarea{width:90%;background:#374151;color:white}
+button{background:#eab308;color:#111827;font-weight:bold;cursor:pointer}
+button:hover{background:#facc15}
+.card{background:#374151;padding:22px;border-radius:14px;margin:15px 0}
+.hidden{display:none}
+.small{color:#d1d5db}
+</style>
+</head>
+<body>
+<main>
+<h1>🕵️ EL IMPOSTOR</h1>
+<p class="small">Descubre quién no conoce la palabra secreta.</p>
+
+<section id="inicio">
+<h2>Nueva partida</h2>
+<p>Escribe los nombres de los jugadores (uno por línea).</p>
+<textarea id="nombres" rows="5" placeholder="Ana&#10;Carlos&#10;Sofía&#10;Mateo"></textarea>
+
+<select id="categoria">
+<option>Animales</option>
+<option>Comida</option>
+<option>Lugares</option>
+<option>Objetos</option>
+</select>
+
+<label>Número de rondas</label>
+<input id="rondas" type="number" min="1" max="10" value="2">
+
+<label>Tiempo de debate (segundos)</label>
+<input id="tiempo" type="number" min="15" max="300" value="60">
+
+<label>Longitud máxima de pista</label>
+<input id="longitud" type="number" min="15" max="120" value="50">
+
+<p><label><input id="ultima" type="checkbox" checked style="width:auto"> Activar última oportunidad del impostor</label></p>
+
+<button onclick="iniciar()">INICIAR PARTIDA</button>
+</section>
+
+<section id="juego" class="hidden">
+<h2 id="titulo"></h2>
+<div class="card" id="contenido"></div>
+<div id="botones"></div>
+</section>
+
+<section id="final" class="hidden">
+<h2>🏆 PARTIDA FINALIZADA</h2>
+<div id="ranking"></div>
+<button onclick="location.reload()">NUEVA PARTIDA</button>
+</section>
+</main>
+
+<script>
+const palabras={
+Animales:["elefante","jirafa","delfin","pinguino","camaleon","murcielago","cocodrilo","flamenco","pulpo","koala"],
+Comida:["hamburguesa","sushi","arepa","empanada","lasana","tacos","ceviche","paella","chocolate","aguacate"],
+Lugares:["hospital","aeropuerto","biblioteca","submarino","volcan","museo","estadio","desierto","zoologico","castillo"],
+Objetos:["microscopio","brujula","telescopio","paraguas","guitarra","reloj","espejo","linterna","candado","bicicleta"]
+};
+
+let jugadores=[], palabra="", impostor=0, ronda=1, totalRondas=2;
+let categoria="", tiempo=60, maxPista=50, ultima=true;
+let pistas=[], votos=[], indice=0, puntos=[];
+let reloj=null, segundos=0;
+
+const $=id=>document.getElementById(id);
+
+function mostrar(id){
+["inicio","juego","final"].forEach(x=>$(x).classList.add("hidden"));
+$(id).classList.remove("hidden");
+}
+
+function botones(html){$("botones").innerHTML=html}
+function escapar(t){return String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+function iniciar(){
+let nombres=$("nombres").value.split("\n").map(n=>n.trim()).filter(Boolean);
+if(nombres.length<3||nombres.length>10){alert("Se necesitan entre 3 y 10 jugadores.");return}
+if(new Set(nombres.map(n=>n.toLowerCase())).size!==nombres.length){alert("No puede haber nombres repetidos.");return}
+totalRondas=Number($("rondas").value);
+tiempo=Number($("tiempo").value);
+maxPista=Number($("longitud").value);
+if(totalRondas<1||totalRondas>10||tiempo<15||tiempo>300||maxPista<15||maxPista>120){alert("Revisa los valores de configuración.");return}
+categoria=$("categoria").value;
+ultima=$("ultima").checked;
+jugadores=nombres.map(nombre=>({nombre,puntos:0}));
+ronda=1;
+nuevaRonda();
+}
+
+function nuevaRonda(){
+palabra=palabras[categoria][Math.floor(Math.random()*palabras[categoria].length)];
+impostor=Math.floor(Math.random()*jugadores.length);
+pistas=[];votos=[];indice=0;
+mostrar("juego");
+revelar();
+}
+
+function revelar(){
+$("titulo").textContent="Ronda "+ronda+" de "+totalRondas+" — Reparto de roles";
+let j=jugadores[indice];
+$("contenido").innerHTML=`<h2>Turno de ${escapar(j.nombre)}</h2><p>Entrega el dispositivo solamente a este jugador.</p><p>Pulsa para descubrir tu rol.</p>`;
+botones('<button onclick="verRol()">VER MI ROL</button>');
+}
+
+function verRol(){
+let esImpostor=indice===impostor;
+$("contenido").innerHTML=esImpostor?
+'<h2>🕵️ ERES EL IMPOSTOR</h2><p>No conoces la palabra secreta. ¡Disimula!</p>':
+`<h2>🟢 ERES CIVIL</h2><p>La palabra secreta es:</p><h1>${escapar(palabra)}</h1>`;
+botones('<button onclick="siguienteJugador()">OCULTAR Y CONTINUAR</button>');
+}
+
+function siguienteJugador(){
+indice++;
+if(indice<jugadores.length){revelar()}
+else{indice=0;fasePistas()}
+}
+
+function fasePistas(){
+$("titulo").textContent="Fase de pistas";
+if(indice>=jugadores.length){debate();return}
+let j=jugadores[indice];
+$("contenido").innerHTML=`<h2>Turno de ${escapar(j.nombre)}</h2><p>Escribe una pista sin revelar la palabra secreta.</p><input id="pista" placeholder="Escribe tu pista..." maxlength="${maxPista}">`;
+botones('<button onclick="guardarPista()">ENVIAR PISTA</button>');
+}
+
+function normalizar(t){return t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim()}
+
+function guardarPista(){
+let texto=$("pista").value.trim();
+if(!texto){alert("La pista no puede estar vacía.");return}
+if(texto.length>maxPista){alert("La pista supera el límite.");return}
+if(normalizar(texto).includes(normalizar(palabra))){alert("No puedes escribir la palabra secreta.");return}
+pistas.push({nombre:jugadores[indice].nombre,texto});
+indice++;
+fasePistas();
+}
+
+function debate(){
+$("titulo").textContent="💬 Debate";
+$("contenido").innerHTML="<h2>¡Discutan las pistas!</h2>"+pistas.map(p=>`<p><b>${escapar(p.nombre)}:</b> ${escapar(p.texto)}</p>`).join("")+`<h1 id="cuenta">${tiempo}</h1><p>Segundos restantes</p>`;
+segundos=tiempo;
+botones('<button onclick="terminarDebate()">IR A VOTACIÓN</button>');
+clearInterval(reloj);
+reloj=setInterval(()=>{
+segundos--;
+if($("cuenta"))$("cuenta").textContent=segundos;
+if(segundos<=0){terminarDebate()}
+},1000);
+}
+
+function terminarDebate(){
+clearInterval(reloj);
+indice=0;
+votos=[];
+votar();
+}
+
+function votar(){
+$("titulo").textContent="🗳️ Votación";
+if(indice>=jugadores.length){resultado();return}
+let opciones=jugadores.map((j,i)=>i===indice?"":`<option value="${i}">${escapar(j.nombre)}</option>`).join("");
+$("contenido").innerHTML=`<h2>Vota: ${escapar(jugadores[indice].nombre)}</h2><p>¿Quién crees que es el impostor?</p><select id="voto">${opciones}</select>`;
+botones('<button onclick="registrarVoto()">CONFIRMAR VOTO</button>');
+}
+
+function registrarVoto(){
+let elegido=Number($("voto").value);
+if(elegido===indice){alert("No puedes votarte a ti mismo.");return}
+votos.push(elegido);
+indice++;
+votar();
+}
+
+function resultado(){
+let conteo=jugadores.map((j,i)=>votos.filter(v=>v===i).length);
+let max=Math.max(...conteo);
+let candidatos=conteo.map((v,i)=>v===max?i:-1).filter(i=>i>=0);
+let expulsado=candidatos[Math.floor(Math.random()*candidatos.length)];
+let atrapado=expulsado===impostor;
+
+$("titulo").textContent="🏁 Resultado de la ronda";
+$("contenido").innerHTML=`<h2>${escapar(jugadores[expulsado].nombre)} recibió más votos.</h2><p>${atrapado?"¡Descubrieron al impostor!":"No descubrieron al impostor."}</p><p>El impostor era: <b>${escapar(jugadores[impostor].nombre)}</b></p><p>La palabra secreta era: <b>${escapar(palabra)}</b></p>`;
+
+if(atrapado&&ultima){
+botones('<p>El impostor tiene una última oportunidad para adivinar.</p><input id="intento" placeholder="Palabra secreta"><button onclick="ultimaOportunidad()">COMPROBAR</button>');
+}else{
+asignarPuntos(!atrapado);
+botones('<button onclick="siguienteRonda()">CONTINUAR</button>');
+}
+}
+
+function ultimaOportunidad(){
+let acierto=normalizar($("intento").value)===normalizar(palabra);
+asignarPuntos(acierto);
+$("contenido").innerHTML=acierto?
+"<h2>¡El impostor adivinó la palabra!</h2><p>Gana el impostor.</p>":
+"<h2>¡El impostor falló!</h2><p>Ganan los civiles.</p>";
+botones('<button onclick="siguienteRonda()">CONTINUAR</button>');
+}
+
+function asignarPuntos(ganaImpostor){
+jugadores.forEach((j,i)=>{
+if(ganaImpostor&&i===impostor)j.puntos+=200;
+if(!ganaImpostor&&i!==impostor)j.puntos+=100;
+});
+}
+
+function siguienteRonda(){
+ronda++;
+if(ronda<=totalRondas){nuevaRonda()}
+else{terminarPartida()}
+}
+
+function terminarPartida(){
+mostrar("final");
+let orden=[...jugadores].sort((a,b)=>b.puntos-a.puntos);
+$("ranking").innerHTML=orden.map((j,i)=>`<div class="card"><h2>${i+1}. ${escapar(j.nombre)}</h2><p>${j.puntos} puntos</p></div>`).join("");
+}
+</script>
+</body>
+</html>
